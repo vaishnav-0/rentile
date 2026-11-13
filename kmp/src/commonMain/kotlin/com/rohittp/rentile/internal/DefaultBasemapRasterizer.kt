@@ -4015,11 +4015,18 @@ private fun drawLinePath(
     // Style space, like every other bound in the draw path: the canvas may be scaled by
     // `outputSizePx / STYLE_REFERENCE_TILE_SIZE_PX`, in which case the surface's own dimensions
     // are not the coordinates anything here is expressed in.
+    // Spike: bound the temporary layer by the stroke's own extent rather than the whole tile. The
+    // layer's composite on restore costs its area, so a full-tile layer per round-joined road was
+    // most of the tile's raster time. The outset covers half the stroke at the largest miter this
+    // function can draw, plus the blur, so nothing the full-tile layer kept is clipped.
+    val pathBounds = path.bounds
+    val outset = paint.strokeWidth / 2f * maxOf(1f, paint.strokeMiter, roundLimit.toFloat()) +
+        3f * blur.toFloat() + 2f
     val layerSaveCount = canvas.saveLayer(
-        0f,
-        0f,
-        logicalSizePx.toFloat(),
-        logicalSizePx.toFloat(),
+        maxOf(0f, pathBounds.left - outset),
+        maxOf(0f, pathBounds.top - outset),
+        minOf(logicalSizePx.toFloat(), pathBounds.right + outset),
+        minOf(logicalSizePx.toFloat(), pathBounds.bottom + outset),
         null,
     )
     try {
