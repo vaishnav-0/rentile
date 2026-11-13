@@ -48,6 +48,30 @@ abstract class UnpackSkikoAndroidNatives : DefaultTask() {
     }
 }
 
+abstract class UnpackSkikoWasmRuntime : DefaultTask() {
+    @get:InputFiles
+    abstract val runtimeJar: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Inject
+    abstract val fileSystemOperations: FileSystemOperations
+
+    @get:Inject
+    abstract val archiveOperations: ArchiveOperations
+
+    @TaskAction
+    fun unpack() {
+        fileSystemOperations.sync {
+            from(archiveOperations.zipTree(runtimeJar.singleFile)) {
+                include("skiko.mjs", "skiko.wasm")
+            }
+            into(outputDir)
+        }
+    }
+}
+
 val skikoAndroidRuntimeArm64 by configurations.creating {
     isCanBeConsumed = false
     isCanBeResolved = true
@@ -60,15 +84,27 @@ val skikoAndroidRuntimeX64 by configurations.creating {
     isTransitive = false
 }
 
+val skikoWasmRuntime by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
 dependencies {
     skikoAndroidRuntimeArm64("org.jetbrains.skiko:skiko-android-runtime-arm64:${libs.versions.skiko.get()}")
     skikoAndroidRuntimeX64("org.jetbrains.skiko:skiko-android-runtime-x64:${libs.versions.skiko.get()}")
+    skikoWasmRuntime("org.jetbrains.skiko:skiko-js-wasm-runtime:${libs.versions.skiko.get()}")
 }
 
 val unpackSkikoAndroidNatives = tasks.register<UnpackSkikoAndroidNatives>("unpackSkikoAndroidNatives") {
     arm64Jar.from(skikoAndroidRuntimeArm64)
     x64Jar.from(skikoAndroidRuntimeX64)
     outputDir.set(layout.buildDirectory.dir("generated/skikoJniLibs"))
+}
+
+val unpackSkikoWasmRuntime = tasks.register<UnpackSkikoWasmRuntime>("unpackSkikoWasmRuntime") {
+    runtimeJar.from(skikoWasmRuntime)
+    outputDir.set(layout.buildDirectory.dir("generated/skikoWasmRuntime"))
 }
 
 val skikoHostOs = System.getProperty("os.name").lowercase().let {
@@ -122,6 +158,18 @@ kotlin {
     linuxX64()
     linuxArm64()
 
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        browser {
+            testTask {
+                useKarma {
+                    useChromeHeadlessNoSandbox()
+                    useConfigDirectory(project.layout.projectDirectory.dir("karma.config.d").asFile)
+                }
+            }
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
@@ -140,6 +188,8 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.okio.fakefilesystem)
         }
+
+        getByName("wasmJsTest").resources.srcDir(unpackSkikoWasmRuntime)
 
         listOf("linuxX64Test", "linuxArm64Test").forEach { sourceSetName ->
             getByName(sourceSetName) {

@@ -1,6 +1,8 @@
 import org.gradle.api.credentials.AwsCredentials
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
+import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
+import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform) apply false
@@ -20,6 +22,12 @@ r2Endpoint.orNull?.let { System.setProperty("org.gradle.s3.endpoint", it) }
 allprojects {
     group = "com.rohittp.rentile"
     version = providers.gradleProperty("VERSION_NAME").get()
+
+    plugins.withType<WasmNodeJsPlugin> {
+        extensions.configure<WasmNodeJsEnvSpec> {
+            download.set(false)
+        }
+    }
 }
 
 subprojects {
